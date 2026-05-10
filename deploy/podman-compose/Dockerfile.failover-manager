@@ -1,4 +1,5 @@
 # Dockerfile for Failover Manager Service
+# Hybrid Architecture - Primary differentiator
 # Uses Podman-compatible format
 
 FROM python:3.11-slim as builder

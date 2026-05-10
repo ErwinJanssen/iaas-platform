@@ -1,5 +1,5 @@
 # Development dependencies for IaaS Platform
-# Generated from pyproject.toml
+# Hybrid Architecture - uses existing tools (Crossplane, NATS, etc.)
 
 # Testing
 pytest>=7.4.0

@@ -1,13 +1,19 @@
 # Podman Compose Configuration for IaaS Platform Development
+# Hybrid Architecture - Uses existing tools (Crossplane, NATS, etc.)
 #
-# This configuration sets up all services needed for local development.
 # Run with: podman-compose -f deploy/podman-compose/podman-compose.dev.yml up -d
 #
-# Note: Podman Compose is compatible with Docker Compose file format.
+# Note: Crossplane requires Kubernetes, so for local development we use:
+# - Kind (Kubernetes in Docker) for Crossplane
+# - All other services run directly in Podman
 
 version: '3.8'
 
 services:
+  # ========================================================================
+  # CUSTOM SERVICES (We Build)
+  # ========================================================================
+
   # API Gateway Service
   api-gateway:
     build:
@@ -19,20 +25,30 @@ services:
     environment:
       - APP_NAME=iaas-api-gateway
       - APP_PORT=8000
+      - CONTROL_PLANE_URL=http://control-plane:8001
+      - FAILOVER_MANAGER_URL=http://failover-manager:8002
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/iaas
       - REDIS_URL=redis://redis:6379/0
-      - CONTROL_PLANE_URL=http://control-plane:8001
+      - NATS_URL=nats://nats:4222
       - JWT_SECRET=dev-secret-change-in-production
       - LOG_LEVEL=DEBUG
     volumes:
-      - ../../src/api-gateway:/app/src/api-gateway:ro
-      - ../../src/providers:/app/src/providers:ro
+      - ../../src:/app/src:ro
     depends_on:
       - postgres
       - redis
+      - nats
+      - control-plane
+      - failover-manager
     networks:
       - iaas-network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
 
   # Control Plane Service
   control-plane:
@@ -47,22 +63,29 @@ services:
       - APP_PORT=8001
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/iaas
       - REDIS_URL=redis://redis:6379/0
-      - MESSAGE_QUEUE_URL=amqp://rabbitmq:5672
-      - PROVIDER_HETZNER_ENABLED=true
-      - PROVIDER_AWS_ENABLED=false
-      - PROVIDER_DIGITALOCEAN_ENABLED=false
+      - NATS_URL=nats://nats:4222
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
+      - MINIO_SECURE=False
+      - CROSSPLANE_API_URL=http://localhost:8080  # Will be on host, not in container network
       - LOG_LEVEL=DEBUG
     volumes:
-      - ../../src/control-plane:/app/src/control-plane:ro
-      - ../../src/providers:/app/src/providers:ro
-      - ../../src/data-layer:/app/src/data-layer:ro
+      - ../../src:/app/src:ro
     depends_on:
       - postgres
       - redis
-      - rabbitmq
+      - nats
+      - minio
     networks:
       - iaas-network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
 
   # Failover Manager Service
   failover-manager:
@@ -77,20 +100,31 @@ services:
       - APP_PORT=8002
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/iaas
       - REDIS_URL=redis://redis:6379/0
+      - NATS_URL=nats://nats:4222
       - CONTROL_PLANE_URL=http://control-plane:8001
       - CHECK_INTERVAL_SECONDS=30
       - FAILOVER_THRESHOLD=3
       - LOG_LEVEL=DEBUG
     volumes:
-      - ../../src/failover-manager:/app/src/failover-manager:ro
-      - ../../src/providers:/app/src/providers:ro
+      - ../../src:/app/src:ro
     depends_on:
       - postgres
       - redis
+      - nats
       - control-plane
     networks:
       - iaas-network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
+  # ========================================================================
+  # EXISTING TOOLS (We Leverage)
+  # ========================================================================
 
   # PostgreSQL Database
   postgres:
@@ -130,23 +164,21 @@ services:
       timeout: 5s
       retries: 5
 
-  # RabbitMQ Message Queue
-  rabbitmq:
-    image: rabbitmq:3-management-alpine
-    container_name: iaas-rabbitmq
+  # NATS Message Queue (replaces RabbitMQ)
+  nats:
+    image: nats:2-alpine
+    container_name: iaas-nats
     ports:
-      - "5672:5672"
-      - "15672:15672"
-    environment:
-      - RABBITMQ_DEFAULT_USER=guest
-      - RABBITMQ_DEFAULT_PASS=guest
+      - "4222:4222"
+      - "8222:8222"  # HTTP monitoring
+    command: ["-js", "-sd", "/data"]  # Enable JetStream
     volumes:
-      - rabbitmq-data:/var/lib/rabbitmq
+      - nats-data:/data
     networks:
       - iaas-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      test: ["CMD", "nats-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -167,6 +199,11 @@ services:
     networks:
       - iaas-network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   # Prometheus Monitoring
   prometheus:
@@ -180,12 +217,15 @@ services:
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
-      - '--web.console.libraries=/etc/prometheus/console_libraries'
-      - '--web.console.templates=/etc/prometheus/consoles'
       - '--web.enable-lifecycle'
     networks:
       - iaas-network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   # Grafana Dashboards
   grafana:
@@ -203,20 +243,39 @@ services:
     restart: unless-stopped
     depends_on:
       - prometheus
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
-  # Web UI (React)
-  web-ui:
-    build:
-      context: ../..
-      dockerfile: deploy/podman-compose/Dockerfile.web-ui
-    container_name: iaas-web-ui
+  # ========================================================================
+  # KUBERNETES FOR CROSSPLANE (Optional - for local Crossplane testing)
+  # ========================================================================
+  # Note: Crossplane requires Kubernetes. For local development:
+  # Option 1: Use Kind (Kubernetes in Docker) - uncomment below
+  # Option 2: Use existing Kubernetes cluster (recommended for production)
+  # Option 3: Skip Crossplane in local dev, use mock
+  #
+  # To use Kind:
+  # 1. Install Kind on host: https://kind.sigs.k8s.io/
+  # 2. Create cluster: kind create cluster --name iaas-crossplane
+  # 3. Install Crossplane: kubectl crossplane install
+  # 4. Install providers: kubectl crossplane provider install <provider>
+  #
+  # For this compose file, we'll use a mock Crossplane API for development
+  # In production, Crossplane runs in its own Kubernetes cluster
+
+  # Mock Crossplane API (for development without Kubernetes)
+  crossplane-mock:
+    image: python:3.11-slim
+    container_name: iaas-crossplane-mock
     ports:
-      - "3000:3000"
-    environment:
-      - NODE_ENV=development
-      - VITE_API_BASE_URL=http://localhost:8000
+      - "8080:8080"
     volumes:
-      - ../../src/web-ui:/app:ro
+      - ../../scripts/crossplane_mock:/app
+    working_dir: /app
+    command: python -m http.server 8080
     networks:
       - iaas-network
     restart: unless-stopped
@@ -224,7 +283,7 @@ services:
 volumes:
   postgres-data:
   redis-data:
-  rabbitmq-data:
+  nats-data:
   minio-data:
   prometheus-data:
   grafana-data:

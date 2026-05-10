@@ -1,7 +1,10 @@
 """API Gateway Service Entry Point.
 
-This is the main entry point for the API Gateway service.
-It initializes the FastAPI application and mounts all routes.
+Single entry point for all user API requests to the IaaS Platform.
+Handles authentication, authorization, request routing, and rate limiting.
+
+Hybrid Architecture: Uses existing tools (Crossplane, NATS, etc.) for
+commodity functionality, custom logic only where necessary.
 """
 
 from fastapi import FastAPI
@@ -31,7 +34,12 @@ app.add_middleware(
 @app.get("/health")
 async def health_check():
     """Health check endpoint for API Gateway."""
-    return {"status": "healthy", "service": "api-gateway"}
+    return {
+        "status": "healthy",
+        "service": "api-gateway",
+        "architecture": "hybrid",
+        "uses": ["crossplane", "nats", "postgresql", "redis", "minio"],
+    }
 
 
 # Root endpoint
@@ -41,11 +49,12 @@ async def root():
     return {
         "name": "IaaS Platform API Gateway",
         "version": "0.1.0",
+        "architecture": "hybrid",
         "docs": "/api/docs",
     }
 
 
-# TODO: Import and mount routers
+# TODO: Add routers
 # from src.api_gateway.routers import vms, storage, network, auth
 # app.include_router(auth.router, prefix="/api/v1/auth", tags=["authentication"])
 # app.include_router(vms.router, prefix="/api/v1/vms", tags=["compute"])

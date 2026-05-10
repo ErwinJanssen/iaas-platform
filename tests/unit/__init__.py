@@ -1,1 +1,1 @@
-"""Unit tests for IaaS Platform."""
+"""Unit tests for IaaS Platform - Hybrid Architecture."""

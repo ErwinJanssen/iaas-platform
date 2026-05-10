@@ -1,8 +1,10 @@
 """Failover Manager Service.
 
-This service monitors provider health and handles automatic failover when
-providers experience outages. It includes health checking, outage detection,
-resource migration, and notification systems.
+Automatic provider failover and health monitoring for the IaaS Platform.
+Monitors provider health and triggers failover when outages are detected.
+
+Part of the Hybrid Architecture - our primary differentiator.
+Uses Crossplane for resource recreation during failover.
 """
 
 __version__ = "0.1.0"

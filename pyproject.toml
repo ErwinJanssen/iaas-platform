@@ -5,14 +5,14 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "iaas-platform"
 version = "0.1.0"
-description = "Open-source Infrastructure-as-a-Service platform"
+description = "Open-source Infrastructure-as-a-Service platform with multi-provider support and automatic failover"
 readme = "README.md"
 license = {text = "Apache-2.0"}
 requires-python = ">=3.10"
 authors = [
     {name = "Erwin Janssen", email = "erwin@iaas-platform.dev"}
 ]
-keywords = ["iaas", "cloud", "infrastructure", "platform"]
+keywords = ["iaas", "cloud", "infrastructure", "platform", "multi-cloud", "failover"]
 classifiers = [
     "Development Status :: 1 - Planning",
     "Intended Audience :: Developers",
@@ -27,6 +27,9 @@ classifiers = [
     "Topic :: System :: Distributed Computing",
     "Topic :: System :: Systems Administration",
 ]
+
+# Hybrid Architecture Dependencies
+# We use existing tools (Crossplane, NATS, etc.) for commodity functionality
 dependencies = [
     # Web Framework
     "fastapi>=0.104.0",
@@ -45,23 +48,23 @@ dependencies = [
     # Database
     "sqlalchemy>=2.0.20",
     "asyncpg>=0.28.0",
-    "psycopg2-binary>=2.9.9",
     "alembic>=1.12.0",
     
     # Redis
     "redis>=5.0.0",
     
-    # Message Queue
-    "aio-pika>=9.0.0",
+    # Message Queue (NATS instead of RabbitMQ)
+    "nats-py>=2.0.0",
     
     # Authentication
     "python-jose[cryptography]>=3.3.0",
     "passlib[bcrypt]>=1.7.4",
     
-    # API Clients
-    "hcloud>=1.10.0",  # Hetzner Cloud SDK
-    "boto3>=1.28.0",  # AWS SDK
-    "requests>=2.31.0",
+    # Kubernetes/Crossplane (for provider abstraction)
+    "kubernetes>=28.0.0",
+    
+    # Object Storage (MinIO)
+    "minio>=7.1.15",
     
     # Monitoring
     "prometheus-client>=0.19.0",
@@ -140,17 +143,16 @@ known_first_party = ["iaas"]
 known_third_party = [
     "alembic",
     "anyio",
-    "aio_pika",
-    "boto3",
     "fastapi",
-    "hcloud",
     "httpx",
     "jose",
+    "kubernetes",
+    "minio",
+    "nats",
     "passlib",
     "prometheus_client",
     "pydantic",
     "redis",
-    "requests",
     "sqlalchemy",
     "structlog",
     "typer",
@@ -169,7 +171,7 @@ warn_redundant_casts = true
 warn_unused_ignores = true
 
 [[tool.mypy.overrides]]
-module = ["sqlalchemy.*", "pydantic.*", "fastapi.*", "hcloud.*", "boto3.*"]
+module = ["kubernetes.*", "pydantic.*", "fastapi.*", "nats.*", "minio.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

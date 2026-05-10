@@ -1,5 +1,5 @@
-# Dockerfile for Control Plane Service
-# Hybrid Architecture - Uses Crossplane for provider abstraction
+# Base Dockerfile for Python services
+# Used by API Gateway, Control Plane, and Failover Manager
 # Uses Podman-compatible format
 
 FROM python:3.11-slim as builder
@@ -39,12 +39,9 @@ ENV PYTHONDONTWRITEBYTECODE=1
 # Switch to non-root user
 USER appuser
 
-# Expose port
-EXPOSE 8001
+# Expose port (will be overridden by specific services)
+EXPOSE 8000
 
-# Health check
+# Health check (will be overridden by specific services)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "import requests; requests.get('http://localhost:8001/health').raise_for_status()" || exit 1
-
-# Run the application
-CMD ["python", "-m", "uvicorn", "src.control_plane.main:app", "--host", "0.0.0.0", "--port", "8001"]
+    CMD python -c "import requests; requests.get('http://localhost:8000/health').raise_for_status()" || exit 1

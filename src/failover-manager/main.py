@@ -1,7 +1,10 @@
 """Failover Manager Service Entry Point.
 
-This is the main entry point for the Failover Manager service.
-It monitors provider health and handles automatic failover operations.
+Automatic provider failover and health monitoring for the IaaS Platform.
+Monitors provider health and triggers failover when outages are detected.
+
+Hybrid Architecture: Our primary differentiator.
+Uses Crossplane for resource recreation during failover.
 """
 
 from fastapi import FastAPI
@@ -10,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 # Create FastAPI application
 app = FastAPI(
     title="IaaS Platform Failover Manager",
-    description="Provider health monitoring and automatic failover service",
+    description="Automatic provider failover and health monitoring service. Uses Crossplane for resource recreation.",
     version="0.1.0",
     docs_url="/api/docs",
     redoc_url="/api/redoc",
@@ -31,7 +34,13 @@ app.add_middleware(
 @app.get("/health")
 async def health_check():
     """Health check endpoint for Failover Manager."""
-    return {"status": "healthy", "service": "failover-manager"}
+    return {
+        "status": "healthy",
+        "service": "failover-manager",
+        "architecture": "hybrid",
+        "uses": ["crossplane", "nats", "postgresql"],
+        "primary_differentiator": True,
+    }
 
 
 # Root endpoint
@@ -41,11 +50,13 @@ async def root():
     return {
         "name": "IaaS Platform Failover Manager",
         "version": "0.1.0",
+        "architecture": "hybrid",
         "docs": "/api/docs",
+        "unique_value": "automatic_multi_provider_failover",
     }
 
 
-# TODO: Import and mount routers
+# TODO: Add routers
 # from src.failover_manager.routers import health, failover
 # app.include_router(health.router, prefix="/api/v1/health", tags=["health"])
 # app.include_router(failover.router, prefix="/api/v1/failover", tags=["failover"])
