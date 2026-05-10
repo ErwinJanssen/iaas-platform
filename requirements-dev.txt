@@ -1,0 +1,30 @@
+# Development dependencies for IaaS Platform
+# Generated from pyproject.toml
+
+# Testing
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+pytest-cov>=4.1.0
+pytest-mock>=3.12.0
+httpx-mock>=0.0.8
+
+# Linting & Formatting
+black>=23.11.0
+isort>=5.12.0
+flake8>=6.1.0
+flake8-bugbear>=23.11.0
+flake8-comprehensions>=3.14.0
+flake8-simplify>=0.21.0
+
+# Type checking
+mypy>=1.7.0
+types-requests>=2.31.0
+types-python-jose>=3.3.0
+sqlalchemy2-stubs>=0.0.2a35
+
+# Pre-commit
+pre-commit>=3.6.0
+
+# Documentation
+mkdocs>=1.5.0
+mkdocs-material>=9.5.0

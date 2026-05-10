@@ -1,0 +1,202 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "iaas-platform"
+version = "0.1.0"
+description = "Open-source Infrastructure-as-a-Service platform"
+readme = "README.md"
+license = {text = "Apache-2.0"}
+requires-python = ">=3.10"
+authors = [
+    {name = "Erwin Janssen", email = "erwin@iaas-platform.dev"}
+]
+keywords = ["iaas", "cloud", "infrastructure", "platform"]
+classifiers = [
+    "Development Status :: 1 - Planning",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Internet :: WWW/HTTP",
+    "Topic :: System :: Distributed Computing",
+    "Topic :: System :: Systems Administration",
+]
+dependencies = [
+    # Web Framework
+    "fastapi>=0.104.0",
+    "uvicorn[standard]>=0.24.0",
+    "python-multipart>=0.0.6",
+    
+    # Async
+    "anyio>=4.0.0",
+    "httpx>=0.25.0",
+    
+    # Data Validation
+    "pydantic>=2.5.0",
+    "pydantic-settings>=2.1.0",
+    "email-validator>=2.0.0",
+    
+    # Database
+    "sqlalchemy>=2.0.20",
+    "asyncpg>=0.28.0",
+    "psycopg2-binary>=2.9.9",
+    "alembic>=1.12.0",
+    
+    # Redis
+    "redis>=5.0.0",
+    
+    # Message Queue
+    "aio-pika>=9.0.0",
+    
+    # Authentication
+    "python-jose[cryptography]>=3.3.0",
+    "passlib[bcrypt]>=1.7.4",
+    
+    # API Clients
+    "hcloud>=1.10.0",  # Hetzner Cloud SDK
+    "boto3>=1.28.0",  # AWS SDK
+    "requests>=2.31.0",
+    
+    # Monitoring
+    "prometheus-client>=0.19.0",
+    
+    # Logging
+    "structlog>=23.2.0",
+    
+    # CLI
+    "typer>=0.9.0",
+    "rich>=13.7.0",
+    
+    # Utilities
+    "python-dotenv>=1.0.0",
+    "pytz>=2023.3",
+]
+
+[project.optional-dependencies]
+dev = [
+    # Testing
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.1.0",
+    "pytest-mock>=3.12.0",
+    "httpx-mock>=0.0.8",
+    
+    # Linting & Formatting
+    "black>=23.11.0",
+    "isort>=5.12.0",
+    "flake8>=6.1.0",
+    "flake8-bugbear>=23.11.0",
+    "flake8-comprehensions>=3.14.0",
+    "flake8-simplify>=0.21.0",
+    "mypy>=1.7.0",
+    "types-requests>=2.31.0",
+    "types-python-jose>=3.3.0",
+    
+    # Type checking
+    "sqlalchemy2-stubs>=0.0.2a35",
+    
+    # Pre-commit
+    "pre-commit>=3.6.0",
+    
+    # Documentation
+    "mkdocs>=1.5.0",
+    "mkdocs-material>=9.5.0",
+]
+
+[project.scripts]
+ iaas-cli = "src.cli.main:app"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.black]
+line-length = 88
+target-version = ["py310", "py311", "py312"]
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.git
+    | \.hg
+    | \.mypy_cache
+    | \.tox
+    | \.venv
+    | _build
+    | buck-out
+    | build
+    | dist
+)/
+'''
+
+[tool.isort]
+profile = "black"
+line_length = 88
+known_first_party = ["iaas"]
+known_third_party = [
+    "alembic",
+    "anyio",
+    "aio_pika",
+    "boto3",
+    "fastapi",
+    "hcloud",
+    "httpx",
+    "jose",
+    "passlib",
+    "prometheus_client",
+    "pydantic",
+    "redis",
+    "requests",
+    "sqlalchemy",
+    "structlog",
+    "typer",
+    "uvicorn",
+]
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+strict_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+
+[[tool.mypy.overrides]]
+module = ["sqlalchemy.*", "pydantic.*", "fastapi.*", "hcloud.*", "boto3.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
+filterwarnings = [
+    "error",
+    "ignore::DeprecationWarning",
+    "ignore::PendingDeprecationWarning",
+]
+
+[tool.coverage.run]
+source = ["src"]
+branch = true
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+    "@abstractmethod",
+]
+ignore_errors = true
+
+[tool.coverage.html]
+directory = "htmlcov"

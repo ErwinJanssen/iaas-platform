@@ -1,0 +1,234 @@
+# Podman Compose Configuration for IaaS Platform Development
+#
+# This configuration sets up all services needed for local development.
+# Run with: podman-compose -f deploy/podman-compose/podman-compose.dev.yml up -d
+#
+# Note: Podman Compose is compatible with Docker Compose file format.
+
+version: '3.8'
+
+services:
+  # API Gateway Service
+  api-gateway:
+    build:
+      context: ../..
+      dockerfile: deploy/podman-compose/Dockerfile.api-gateway
+    container_name: iaas-api-gateway
+    ports:
+      - "8000:8000"
+    environment:
+      - APP_NAME=iaas-api-gateway
+      - APP_PORT=8000
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/iaas
+      - REDIS_URL=redis://redis:6379/0
+      - CONTROL_PLANE_URL=http://control-plane:8001
+      - JWT_SECRET=dev-secret-change-in-production
+      - LOG_LEVEL=DEBUG
+    volumes:
+      - ../../src/api-gateway:/app/src/api-gateway:ro
+      - ../../src/providers:/app/src/providers:ro
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - iaas-network
+    restart: unless-stopped
+
+  # Control Plane Service
+  control-plane:
+    build:
+      context: ../..
+      dockerfile: deploy/podman-compose/Dockerfile.control-plane
+    container_name: iaas-control-plane
+    ports:
+      - "8001:8001"
+    environment:
+      - APP_NAME=iaas-control-plane
+      - APP_PORT=8001
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/iaas
+      - REDIS_URL=redis://redis:6379/0
+      - MESSAGE_QUEUE_URL=amqp://rabbitmq:5672
+      - PROVIDER_HETZNER_ENABLED=true
+      - PROVIDER_AWS_ENABLED=false
+      - PROVIDER_DIGITALOCEAN_ENABLED=false
+      - LOG_LEVEL=DEBUG
+    volumes:
+      - ../../src/control-plane:/app/src/control-plane:ro
+      - ../../src/providers:/app/src/providers:ro
+      - ../../src/data-layer:/app/src/data-layer:ro
+    depends_on:
+      - postgres
+      - redis
+      - rabbitmq
+    networks:
+      - iaas-network
+    restart: unless-stopped
+
+  # Failover Manager Service
+  failover-manager:
+    build:
+      context: ../..
+      dockerfile: deploy/podman-compose/Dockerfile.failover-manager
+    container_name: iaas-failover-manager
+    ports:
+      - "8002:8002"
+    environment:
+      - APP_NAME=iaas-failover-manager
+      - APP_PORT=8002
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/iaas
+      - REDIS_URL=redis://redis:6379/0
+      - CONTROL_PLANE_URL=http://control-plane:8001
+      - CHECK_INTERVAL_SECONDS=30
+      - FAILOVER_THRESHOLD=3
+      - LOG_LEVEL=DEBUG
+    volumes:
+      - ../../src/failover-manager:/app/src/failover-manager:ro
+      - ../../src/providers:/app/src/providers:ro
+    depends_on:
+      - postgres
+      - redis
+      - control-plane
+    networks:
+      - iaas-network
+    restart: unless-stopped
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: iaas-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=iaas
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - iaas-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: iaas-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - iaas-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # RabbitMQ Message Queue
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: iaas-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      - RABBITMQ_DEFAULT_USER=guest
+      - RABBITMQ_DEFAULT_PASS=guest
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    networks:
+      - iaas-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # MinIO Object Storage
+  minio:
+    image: minio/minio:latest
+    container_name: iaas-minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio-data:/data
+    networks:
+      - iaas-network
+    restart: unless-stopped
+
+  # Prometheus Monitoring
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: iaas-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ../../deploy/podman-compose/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    networks:
+      - iaas-network
+    restart: unless-stopped
+
+  # Grafana Dashboards
+  grafana:
+    image: grafana/grafana:latest
+    container_name: iaas-grafana
+    ports:
+      - "3001:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    networks:
+      - iaas-network
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+
+  # Web UI (React)
+  web-ui:
+    build:
+      context: ../..
+      dockerfile: deploy/podman-compose/Dockerfile.web-ui
+    container_name: iaas-web-ui
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - VITE_API_BASE_URL=http://localhost:8000
+    volumes:
+      - ../../src/web-ui:/app:ro
+    networks:
+      - iaas-network
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  redis-data:
+  rabbitmq-data:
+  minio-data:
+  prometheus-data:
+  grafana-data:
+
+networks:
+  iaas-network:
+    driver: bridge
